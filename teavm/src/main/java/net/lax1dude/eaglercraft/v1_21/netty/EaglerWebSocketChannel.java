@@ -11,14 +11,13 @@ import io.netty.channel.ChannelMetadata;
 import io.netty.channel.ChannelOutboundBuffer;
 import io.netty.channel.ChannelPromise;
 import io.netty.channel.DefaultChannelConfig;
-import io.netty.channel.DefaultEventLoopGroup;
 import io.netty.channel.EventLoop;
 import io.netty.channel.PreferHeapByteBufAllocator;
 import io.netty.channel.SingleThreadEventLoop;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
+import java.util.concurrent.TimeUnit;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.multiplayer.resolver.ServerAddress;
 import org.teavm.jso.JSBody;
 
 /**
@@ -27,8 +26,8 @@ import org.teavm.jso.JSBody;
  * callbacks are marshalled onto this channel's event loop so netty only ever sees events on its loop thread
  * (the pattern proven by the integrated-server LocalChannel + DefaultEventLoop in this TeaVM build).
  *
- * P1: opens the socket (URL from the JS global {@code __EAGLER_WS_URL}), round-trips raw bytes. Handshake +
- * real address plumbing come in P2.
+ * The WebSocket opens before the Eagler handshake starts. The connect future completes once
+ * the handshake has released the Minecraft pipeline.
  */
 public final class EaglerWebSocketChannel extends AbstractChannel {
 
@@ -37,14 +36,17 @@ public final class EaglerWebSocketChannel extends AbstractChannel {
 	private enum State { OPEN, CONNECTED, CLOSED }
 
 	private final ChannelConfig config;
+	private final String url;
 	private volatile State state = State.OPEN;
+	private ChannelPromise connectPromise;
 	private EaglerWebSocketTransport transport;
 	private volatile SocketAddress remoteAddress;
 	private volatile SocketAddress localAddress;
 	private boolean readPending;
 
-	public EaglerWebSocketChannel() {
+	public EaglerWebSocketChannel(String url) {
 		super(null);
+		this.url = url;
 		System.out.println("[EaglerHS] channel ctor: AbstractChannel ready");
 		config = new DefaultChannelConfig(this);
 		System.out.println("[EaglerHS] channel ctor: DefaultChannelConfig ready");
@@ -122,6 +124,9 @@ public final class EaglerWebSocketChannel extends AbstractChannel {
 			return;
 		}
 		state = State.CLOSED;
+		if (connectPromise != null) {
+			connectPromise.tryFailure(new IllegalStateException("WebSocket closed before the Eagler login completed"));
+		}
 		if (transport != null) {
 			transport.close();
 		}
@@ -174,34 +179,33 @@ public final class EaglerWebSocketChannel extends AbstractChannel {
 		@Override
 		public void connect(SocketAddress remote, SocketAddress local, ChannelPromise promise) {
 			System.out.println("[EaglerHS] unsafe.connect enter");
-			if (!promise.setUncancellable() || !ensureOpen(promise)) {
-				System.out.println("[EaglerHS] unsafe.connect bailed (uncancellable/open)");
+			if (promise.isCancelled() || !ensureOpen(promise)) {
 				return;
 			}
+			connectPromise = promise;
 			try {
-				remoteAddress = remote != null ? remote : new InetSocketAddress("eagler", 0);
-				String url = wsUrl();
-				System.out.println("[EaglerHS] unsafe.connect url=" + url);
-				if (url == null || url.isEmpty()) {
-					promise.setFailure(new IllegalStateException("No __EAGLER_WS_URL set for WebSocket connect"));
-					return;
-				}
+				remoteAddress = remote;
 				transport = new EaglerWebSocketTransport(url);
 				System.out.println("[EaglerHS] transport constructed");
 				final EventLoop loop = eventLoop();
+				int timeoutMillis = config.getConnectTimeoutMillis();
+				var timeout = timeoutMillis > 0 ? loop.schedule(
+					() -> failHandshake("Timed out waiting for the Eagler server"),
+					timeoutMillis, TimeUnit.MILLISECONDS
+				) : null;
+				promise.addListener(result -> {
+					if (timeout != null) timeout.cancel(false);
+					if (result.isCancelled()) close(voidPromise());
+				});
 				transport.setOnOpen(() -> loop.execute(() -> {
 					if (state == State.OPEN) {
 						state = State.CONNECTED;
-						promise.trySuccess();
 						pipeline().fireChannelActive();
 					}
 				}));
 				transport.setOnReadable(() -> loop.execute(EaglerWebSocketChannel.this::drainInbound));
 				transport.setOnClosed(() -> loop.execute(() -> {
 					if (state != State.CLOSED) {
-						if (state != State.CONNECTED) {
-							promise.tryFailure(new IllegalStateException("WebSocket connect failed"));
-						}
 						close(voidPromise());
 					}
 				}));
@@ -209,19 +213,20 @@ public final class EaglerWebSocketChannel extends AbstractChannel {
 			} catch (Throwable t) {
 				System.out.println("[EaglerHS] unsafe.connect CAUGHT " + t.getClass().getName() + ": " + t.getMessage());
 				promise.tryFailure(t);
+				close(voidPromise());
 			}
 		}
 	}
 
-	// The Direct Connect screen records a validated wss:// URL on ServerAddress before it creates this
-	// channel. The page-global fallback keeps the standalone P1/P2 harness usable.
-	private static String wsUrl() {
-		String url = ServerAddress.getActiveWebSocketUrl();
-		return url != null ? url : harnessWsUrl();
+	void finishHandshake() {
+		connectPromise.trySuccess();
 	}
 
-	@JSBody(params = {}, script = "return (typeof window !== 'undefined' && window.__EAGLER_WS_URL) ? window.__EAGLER_WS_URL : null;")
-	private static native String harnessWsUrl();
+	void failHandshake(String reason) {
+		if (connectPromise.tryFailure(new IllegalStateException(reason))) {
+			close();
+		}
+	}
 
 	// P2 self-test: if window.__EAGLER_WS_TEST2 is set, bootstrap the netty channel (which adds the Eagler
 	// handshake handler) and connect, so we exercise the full handshake against the live server without the
@@ -231,7 +236,6 @@ public final class EaglerWebSocketChannel extends AbstractChannel {
 		if (url == null || url.isEmpty()) {
 			return false;
 		}
-		setWsUrl(url);
 		System.out.println("[EaglerHS] self-test bootstrapping handshake to " + url);
 		// Use the SAME group the real multiplayer path uses (holder builds it with a daemon
 		// ThreadFactoryBuilder factory). A bare `new DefaultEventLoopGroup(1)` uses netty's
@@ -254,7 +258,7 @@ public final class EaglerWebSocketChannel extends AbstractChannel {
 			System.out.println("[EaglerHS] test stage: configure bootstrap");
 			Bootstrap bootstrap = new Bootstrap().group(group).channelFactory(() -> {
 				try {
-					return new EaglerWebSocketChannel();
+					return new EaglerWebSocketChannel(url);
 				} catch (Throwable t) {
 					System.out.println("[EaglerHS] FAIL constructing channel: " + t);
 					throw t;
@@ -283,6 +287,4 @@ public final class EaglerWebSocketChannel extends AbstractChannel {
 	@JSBody(params = {}, script = "return (typeof window !== 'undefined' && window.__EAGLER_WS_TEST2) ? window.__EAGLER_WS_TEST2 : null;")
 	private static native String handshakeTestUrl();
 
-	@JSBody(params = "u", script = "if (typeof window !== 'undefined') window.__EAGLER_WS_URL = u;")
-	private static native void setWsUrl(String u);
 }

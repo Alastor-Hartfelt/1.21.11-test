@@ -60,15 +60,12 @@ const server = http.createServer((req, res) => {
 		const page = await browser.newPage();
 		await page.setViewport({ width: 1280, height: 720 });
 
-		// Multiplayer P1: set the transport self-test / connect URL BEFORE the module boots.
+		// Set the requested transport self-test before the module boots.
 		if (process.env.WS_TEST) {
-			await page.evaluateOnNewDocument(u => { window.__EAGLER_WS_TEST = u; window.__EAGLER_WS_URL = u; }, process.env.WS_TEST);
+			await page.evaluateOnNewDocument(url => { window.__EAGLER_WS_TEST = url; }, process.env.WS_TEST);
 		}
 		if (process.env.WS_TEST2) {
-			await page.evaluateOnNewDocument(u => { window.__EAGLER_WS_TEST2 = u; window.__EAGLER_WS_URL = u; }, process.env.WS_TEST2);
-		}
-		if (process.env.WS_URL) {
-			await page.evaluateOnNewDocument(u => { window.__EAGLER_WS_URL = u; }, process.env.WS_URL);
+			await page.evaluateOnNewDocument(url => { window.__EAGLER_WS_TEST2 = url; }, process.env.WS_TEST2);
 		}
 
 		page.on('console', msg => {

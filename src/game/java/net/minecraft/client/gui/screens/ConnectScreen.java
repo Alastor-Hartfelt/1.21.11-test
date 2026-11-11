@@ -97,7 +97,6 @@ public class ConnectScreen extends Screen {
                     if (p_249536_.getWebSocketUrl() != null) {
                         // Browsers cannot resolve/open TCP sockets. Keep the original URL for the
                         // WebSocket channel and use an unresolved placeholder to bypass DNS.
-                        p_249536_.activateWebSocketUrl();
                         optional = Optional.of(InetSocketAddress.createUnresolved(p_249536_.getHost(), p_249536_.getPort()));
                     } else {
                         optional = ServerNameResolver.DEFAULT.resolveAddress(p_249536_).map(ResolvedServerAddress::asInetSocketAddress);
@@ -125,7 +124,7 @@ public class ConnectScreen extends Screen {
                         connection = new Connection(PacketFlow.CLIENTBOUND);
                         connection.setBandwidthLogger(p_251955_.getDebugOverlay().getBandwidthLogger());
                         ConnectScreen.this.channelFuture = Connection.connect(
-                            inetsocketaddress, EventLoopGroupHolder.remote(p_251955_.options.useNativeTransport()), connection
+                            inetsocketaddress, EventLoopGroupHolder.remote(p_251955_.options.useNativeTransport()), connection, p_249536_.getWebSocketUrl()
                         );
                     }
 

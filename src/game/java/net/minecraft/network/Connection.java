@@ -436,7 +436,11 @@ public class Connection extends SimpleChannelInboundHandler<Packet<?>> {
     }
 
     public static ChannelFuture connect(InetSocketAddress p_290034_, EventLoopGroupHolder p_459165_, final Connection p_290031_) {
-        return new Bootstrap().group(p_459165_.eventLoopGroup()).handler(new ChannelInitializer<Channel>() {
+        return connect(p_290034_, p_459165_, p_290031_, null);
+    }
+
+    public static ChannelFuture connect(InetSocketAddress address, EventLoopGroupHolder eventLoops, Connection connection, @Nullable String webSocketUrl) {
+        Bootstrap bootstrap = new Bootstrap().group(eventLoops.eventLoopGroup()).handler(new ChannelInitializer<Channel>() {
             @Override
             protected void initChannel(Channel p_129552_) {
                 try {
@@ -445,10 +449,11 @@ public class Connection extends SimpleChannelInboundHandler<Packet<?>> {
                 }
 
                 ChannelPipeline channelpipeline = p_129552_.pipeline().addLast("timeout", new ReadTimeoutHandler(30));
-                Connection.configureSerialization(channelpipeline, PacketFlow.CLIENTBOUND, false, p_290031_.bandwidthDebugMonitor);
-                p_290031_.configurePacketHandler(channelpipeline);
+                Connection.configureSerialization(channelpipeline, PacketFlow.CLIENTBOUND, false, connection.bandwidthDebugMonitor);
+                connection.configurePacketHandler(channelpipeline);
             }
-        }).channel(p_459165_.channelCls()).connect(p_290034_.getAddress(), p_290034_.getPort());
+        });
+        return eventLoops.connect(bootstrap, address, webSocketUrl);
     }
 
     private static String outboundHandlerName(boolean p_319809_) {

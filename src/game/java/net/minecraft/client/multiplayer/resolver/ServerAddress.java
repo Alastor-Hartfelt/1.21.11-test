@@ -12,8 +12,6 @@ public final class ServerAddress {
     private final HostAndPort hostAndPort;
     @Nullable
     private final String webSocketUrl;
-    @Nullable
-    private static volatile String activeWebSocketUrl;
     private static final ServerAddress INVALID = new ServerAddress(HostAndPort.fromParts("server.invalid", 25565), null);
 
     public ServerAddress(String p_171861_, int p_171862_) {
@@ -44,15 +42,6 @@ public final class ServerAddress {
     @Nullable
     public String getWebSocketUrl() {
         return this.webSocketUrl;
-    }
-
-    public void activateWebSocketUrl() {
-        activeWebSocketUrl = this.webSocketUrl;
-    }
-
-    @Nullable
-    public static String getActiveWebSocketUrl() {
-        return activeWebSocketUrl;
     }
 
     public static ServerAddress parseString(@Nullable String p_171865_) {

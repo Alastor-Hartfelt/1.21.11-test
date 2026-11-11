@@ -11,11 +11,11 @@ import net.minecraft.SharedConstants;
  * Mirrors the repo's 1.8 HandshakerHandler/Instance/V5 byte-for-byte, but advertises the 1.21.11 MC protocol
  * and uses netty ByteBufs. On channelActive it sends 0x01 CLIENT_VERSION and *swallows* the event so MC's
  * Connection (further down the pipeline) doesn't send its own intention packet mid-handshake. After the
- * server's 0x09 FINISH it (P3) will strip varint framing and hand off to MC's login; P2 just reaches 0x09.
+ * server's 0x09 FINISH it hands off to MC's login and releases the connection future.
  *
  * Packet ids: 0x01 CLIENT_VERSION, 0x02 SERVER_VERSION, 0x03 VERSION_MISMATCH, 0x04 CLIENT_REQUEST_LOGIN,
  * 0x05 SERVER_ALLOW_LOGIN, 0x06 SERVER_DENY_LOGIN, 0x07 CLIENT_PROFILE_DATA, 0x08 CLIENT_FINISH_LOGIN,
- * 0x09 SERVER_FINISH_LOGIN, 0xFF SERVER_ERROR. Game framing is one WS frame per packet (no varint length).
+ * 0x09 SERVER_FINISH_LOGIN, 0xFF SERVER_ERROR. Minecraft traffic retains its normal varint framing.
  */
 public final class EaglerHandshakeHandler extends ChannelInboundHandlerAdapter {
 
@@ -89,8 +89,9 @@ public final class EaglerHandshakeHandler extends ChannelInboundHandlerAdapter {
 						// channelActive so Connection sends its ordinary login-intention packet.
 						ctx.pipeline().remove(this);
 						ctx.fireChannelActive();
+						((EaglerWebSocketChannel) ctx.channel()).finishHandshake();
 					} else if (pkt == 0x0A) {
-						System.out.println("[EaglerHS] server redirect (0x0A) — not handled in P2");
+						fail(ctx, "This Eagler server requested a redirect");
 					} else if (pkt == 0xFF) {
 						handleServerError(ctx, in, false);
 					} else {
@@ -224,7 +225,7 @@ public final class EaglerHandshakeHandler extends ChannelInboundHandlerAdapter {
 	private void fail(ChannelHandlerContext ctx, String why) {
 		System.out.println("[EaglerHS] FAIL: " + why);
 		state = State.DONE;
-		ctx.close();
+		((EaglerWebSocketChannel) ctx.channel()).failHandshake(why);
 	}
 
 	// ---- helpers -------------------------------------------------------------------------------

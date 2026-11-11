@@ -1,7 +1,9 @@
 package net.minecraft.server.network;
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
+import io.netty.bootstrap.Bootstrap;
 import io.netty.channel.Channel;
+import io.netty.channel.ChannelFuture;
 import io.netty.channel.DefaultEventLoopGroup;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.IoHandlerFactory;
@@ -13,6 +15,8 @@ import io.netty.channel.local.LocalServerChannel;
 import io.netty.channel.nio.NioIoHandler;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.channel.socket.nio.NioSocketChannel;
+import io.netty.resolver.NoopAddressResolverGroup;
+import java.net.InetSocketAddress;
 import java.util.concurrent.ThreadFactory;
 import net.lax1dude.eaglercraft.v1_21.netty.EaglerWebSocketChannel;
 import org.jspecify.annotations.Nullable;
@@ -98,6 +102,17 @@ public abstract class EventLoopGroupHolder {
 
     public Class<? extends Channel> channelCls() {
         return this.channelCls;
+    }
+
+    public ChannelFuture connect(Bootstrap bootstrap, InetSocketAddress address, @Nullable String webSocketUrl) {
+        if (this == WEBSOCKET) {
+            if (webSocketUrl == null) {
+                throw new IllegalArgumentException("Enter a full ws:// or wss:// Eagler server address");
+            }
+            return bootstrap.channelFactory(() -> new EaglerWebSocketChannel(webSocketUrl))
+                .resolver(NoopAddressResolverGroup.INSTANCE).connect(address);
+        }
+        return bootstrap.channel(this.channelCls()).connect(address);
     }
 
     public Class<? extends ServerChannel> serverChannelCls() {
