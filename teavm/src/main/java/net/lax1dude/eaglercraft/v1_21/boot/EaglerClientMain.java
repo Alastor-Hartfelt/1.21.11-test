@@ -1,5 +1,7 @@
 package net.lax1dude.eaglercraft.v1_21.boot;
 
+import org.teavm.jso.JSBody;
+
 /**
  * Stage C entry point: boot the full Minecraft client through its normal
  * {@code net.minecraft.client.main.Main} path with synthetic launch args. This
@@ -44,7 +46,7 @@ public class EaglerClientMain {
 			"--gameDir", "/game",
 			"--assetsDir", "/game/assets",
 			"--assetIndex", "29",
-			"--username", "Player",
+			"--username", browserUsername(),
 			"--accessToken", "0",
 			"--userType", "legacy",
 			"--uuid", "00000000000000000000000000000000",
@@ -55,4 +57,8 @@ public class EaglerClientMain {
 
 		net.minecraft.client.main.Main.main(launchArgs);
 	}
+
+	@JSBody(params = {}, script = "var name = typeof window === 'undefined' ? '' : new URLSearchParams(window.location.search).get('username');"
+		+ "return /^[A-Za-z0-9_]{1,16}$/.test(name || '') ? name : 'Player';")
+	private static native String browserUsername();
 }

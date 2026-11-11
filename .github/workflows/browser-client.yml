@@ -29,13 +29,11 @@ jobs:
       - name: Check first frame in Chromium
         env:
           SMOKE: '1'
-          SCREENSHOT: ${{ runner.temp }}/minecraft-first-frame.png
+          SCREENSHOT: teavm/build/browser-client/minecraft-first-frame.png
         run: node teavm/run/chromium-run.js teavm/build/browser-client/classes.js 180
       - name: Upload browser bundle
         uses: actions/upload-artifact@v4
         with:
           name: minecraft-1.21.11-browser-client
-          path: |
-            teavm/build/browser-client
-            ${{ runner.temp }}/minecraft-first-frame.png
+          path: teavm/build/browser-client
           if-no-files-found: error

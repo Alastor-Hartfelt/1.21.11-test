@@ -1,6 +1,7 @@
 package net.minecraft.network;
 
 import com.google.common.collect.Queues;
+import com.mojang.authlib.GameProfile;
 import com.mojang.logging.LogUtils;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.channel.Channel;
@@ -22,6 +23,7 @@ import io.netty.channel.local.LocalServerChannel;
 import io.netty.handler.flow.FlowControlHandler;
 import io.netty.handler.timeout.ReadTimeoutHandler;
 import io.netty.handler.timeout.TimeoutException;
+import io.netty.util.AttributeKey;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.nio.channels.ClosedChannelException;
@@ -56,6 +58,7 @@ import org.slf4j.Marker;
 import org.slf4j.MarkerFactory;
 
 public class Connection extends SimpleChannelInboundHandler<Packet<?>> {
+    public static final AttributeKey<GameProfile> EAGLER_PROFILE = AttributeKey.valueOf("eagler.profile");
     private static final float AVERAGE_PACKETS_SMOOTHING = 0.75F;
     private static final Logger LOGGER = LogUtils.getLogger();
     public static final Marker ROOT_MARKER = MarkerFactory.getMarker("NETWORK");

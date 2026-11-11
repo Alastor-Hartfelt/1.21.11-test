@@ -1,21 +1,25 @@
 package net.lax1dude.eaglercraft.v1_21.netty;
 
+import com.mojang.authlib.GameProfile;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
+import java.nio.charset.StandardCharsets;
+import java.util.UUID;
 import net.minecraft.SharedConstants;
+import net.minecraft.network.Connection;
 
 /**
  * Client-side EaglercraftX handshake, run at the HEAD of the pipeline over {@link EaglerWebSocketChannel}.
  * Mirrors the repo's 1.8 HandshakerHandler/Instance/V5 byte-for-byte, but advertises the 1.21.11 MC protocol
  * and uses netty ByteBufs. On channelActive it sends 0x01 CLIENT_VERSION and *swallows* the event so MC's
  * Connection (further down the pipeline) doesn't send its own intention packet mid-handshake. After the
- * server's 0x09 FINISH it hands off to MC's login and releases the connection future.
+ * server's 0x09 FINISH it hands off to Minecraft's configuration protocol.
  *
  * Packet ids: 0x01 CLIENT_VERSION, 0x02 SERVER_VERSION, 0x03 VERSION_MISMATCH, 0x04 CLIENT_REQUEST_LOGIN,
  * 0x05 SERVER_ALLOW_LOGIN, 0x06 SERVER_DENY_LOGIN, 0x07 CLIENT_PROFILE_DATA, 0x08 CLIENT_FINISH_LOGIN,
- * 0x09 SERVER_FINISH_LOGIN, 0xFF SERVER_ERROR. Minecraft traffic retains its normal varint framing.
+ * 0x09 SERVER_FINISH_LOGIN, 0xFF SERVER_ERROR. Each WebSocket frame carries one packet.
  */
 public final class EaglerHandshakeHandler extends ChannelInboundHandlerAdapter {
 
@@ -23,6 +27,7 @@ public final class EaglerHandshakeHandler extends ChannelInboundHandlerAdapter {
 
 	private State state = State.NEW;
 	private boolean nicknameSelection = true;
+	private GameProfile acceptedProfile;
 	private final String username;
 
 	public EaglerHandshakeHandler(String username) {
@@ -45,7 +50,7 @@ public final class EaglerHandshakeHandler extends ChannelInboundHandlerAdapter {
 		System.out.println("[EaglerHS] channelActive -> sending 0x01 CLIENT_VERSION");
 		sendClientVersion(ctx);
 		state = State.SENT_VERSION;
-		// swallow: do NOT super.channelActive(ctx) — MC's Connection must not send its intention yet.
+		// Wait for the Eagler server to finish login before activating Minecraft's pipeline.
 	}
 
 	@Override
@@ -83,10 +88,16 @@ public final class EaglerHandshakeHandler extends ChannelInboundHandlerAdapter {
 				case SENT_FINISH:
 					if (pkt == 0x09) {
 						state = State.DONE;
-						System.out.println("[EaglerHS] HANDSHAKE COMPLETE (0x09). Handing off to MC login.");
-						// The server's WebSocket codec only unwraps binary frames; the vanilla side still
-						// uses the normal varint-framed MC byte stream. Remove this handler, then replay
-						// channelActive so Connection sends its ordinary login-intention packet.
+						System.out.println("[EaglerHS] HANDSHAKE COMPLETE (0x09). Starting Minecraft configuration.");
+						// EaglerXServer has already sent the vanilla handshake, hello, and
+						// login acknowledgement to its backend. Hold its configuration frames
+						// until ConnectScreen installs the configuration decoder.
+						ctx.channel().attr(Connection.EAGLER_PROFILE).set(acceptedProfile);
+						if (ctx.pipeline().context("splitter") != null) {
+							ctx.channel().config().setAutoRead(false);
+							ctx.pipeline().remove("splitter");
+							ctx.pipeline().remove("prepender");
+						}
 						ctx.pipeline().remove(this);
 						ctx.fireChannelActive();
 						((EaglerWebSocketChannel) ctx.channel()).finishHandshake();
@@ -181,6 +192,7 @@ public final class EaglerHandshakeHandler extends ChannelInboundHandlerAdapter {
 		String user = readAscii(in, in.readUnsignedByte());
 		long msb = in.readLong();
 		long lsb = in.readLong();
+		acceptedProfile = new GameProfile(new UUID(msb, lsb), user);
 		System.out.println("[EaglerHS] <- 0x05 ALLOW_LOGIN user=" + user + " uuid=" + msb + ":" + lsb);
 		// V5 also carries caps; we don't need them to proceed. Send minimal profile data + finish.
 		sendProfileData(ctx);
@@ -217,8 +229,8 @@ public final class EaglerHandshakeHandler extends ChannelInboundHandlerAdapter {
 
 	private void handleServerError(ChannelHandlerContext ctx, ByteBuf in, boolean afterVersion) {
 		int code = in.readUnsignedByte();
-		int len = in.readUnsignedByte();
-		String msg = readAscii(in, Math.min(len, in.readableBytes()));
+		int len = afterVersion ? in.readUnsignedByte() : in.readUnsignedShort();
+		String msg = in.readCharSequence(Math.min(len, in.readableBytes()), StandardCharsets.UTF_8).toString();
 		fail(ctx, "server error code=" + code + " msg=" + msg);
 	}
 

@@ -172,8 +172,19 @@ public class ClientHandshakePacketListenerImpl implements ClientLoginPacketListe
 
     @Override
     public void handleLoginFinished(ClientboundLoginFinishedPacket p_374132_) {
+        this.startConfiguration(p_374132_.gameProfile(), true);
+    }
+
+    public void handleEaglerLoginFinished(GameProfile profile) {
+        this.startConfiguration(profile, false);
+    }
+
+    private void startConfiguration(GameProfile gameprofile, boolean acknowledgeLogin) {
         this.switchState(ClientHandshakePacketListenerImpl.State.JOINING);
-        GameProfile gameprofile = p_374132_.gameProfile();
+        if (!acknowledgeLogin) {
+            // Installing the inbound decoder resumes reads, so have the reply encoder ready first.
+            this.connection.setupOutboundProtocol(ConfigurationProtocols.SERVERBOUND);
+        }
         this.connection
             .setupInboundProtocol(
                 ConfigurationProtocols.CLIENTBOUND,
@@ -198,8 +209,10 @@ public class ClientHandshakePacketListenerImpl implements ClientLoginPacketListe
                     )
                 )
             );
-        this.connection.send(ServerboundLoginAcknowledgedPacket.INSTANCE);
-        this.connection.setupOutboundProtocol(ConfigurationProtocols.SERVERBOUND);
+        if (acknowledgeLogin) {
+            this.connection.send(ServerboundLoginAcknowledgedPacket.INSTANCE);
+            this.connection.setupOutboundProtocol(ConfigurationProtocols.SERVERBOUND);
+        }
         this.connection.send(new ServerboundCustomPayloadPacket(new BrandPayload(ClientBrandRetriever.getClientModName())));
         this.connection.send(new ServerboundClientInformationPacket(this.minecraft.options.buildPlayerInformation()));
     }

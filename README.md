@@ -9,6 +9,8 @@ python3 -m http.server 8080 --directory teavm/build/browser-client
 
 Open http://localhost:8080 in a browser with WebGL2. The bundle contains the launcher,
 compiled JavaScript, and vanilla resources. Serve the entire directory over HTTP.
+To use a different multiplayer name, add a query such as `?username=ChatGPTWork`
+to the client page URL before opening Direct Connect.
 
 To check startup in headless Chromium, install the harness dependencies from the
 lockfile and run the smoke check from the repository root:

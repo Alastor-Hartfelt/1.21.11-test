@@ -116,6 +116,7 @@ public class ConnectScreen extends Screen {
 
                     inetsocketaddress = optional.get();
                     Connection connection;
+                    ChannelFuture pendingConnection;
                     synchronized (ConnectScreen.this) {
                         if (ConnectScreen.this.aborted) {
                             return;
@@ -123,12 +124,13 @@ public class ConnectScreen extends Screen {
 
                         connection = new Connection(PacketFlow.CLIENTBOUND);
                         connection.setBandwidthLogger(p_251955_.getDebugOverlay().getBandwidthLogger());
-                        ConnectScreen.this.channelFuture = Connection.connect(
+                        pendingConnection = Connection.connect(
                             inetsocketaddress, EventLoopGroupHolder.remote(p_251955_.options.useNativeTransport()), connection, p_249536_.getWebSocketUrl()
                         );
+                        ConnectScreen.this.channelFuture = pendingConnection;
                     }
 
-                    ConnectScreen.this.channelFuture.syncUninterruptibly();
+                    ChannelFuture connected = pendingConnection.syncUninterruptibly();
                     synchronized (ConnectScreen.this) {
                         if (ConnectScreen.this.aborted) {
                             connection.disconnect(ConnectScreen.ABORT_CONNECTION);
@@ -139,26 +141,31 @@ public class ConnectScreen extends Screen {
                         p_251955_.getDownloadedPackSource().configureForServerControl(connection, convertPackStatus(p_252078_.getResourcePackStatus()));
                     }
 
-                    ConnectScreen.this.connection
-                        .initiateServerboundPlayConnection(
+                    var loginListener = new ClientHandshakePacketListenerImpl(
+                        connection,
+                        p_251955_,
+                        p_252078_,
+                        ConnectScreen.this.parent,
+                        false,
+                        null,
+                        ConnectScreen.this::updateStatus,
+                        new LevelLoadTracker(),
+                        p_320415_
+                    );
+                    var eaglerProfile = connected.channel().attr(Connection.EAGLER_PROFILE).get();
+                    if (eaglerProfile != null) {
+                        loginListener.handleEaglerLoginFinished(eaglerProfile);
+                    } else {
+                        connection.initiateServerboundPlayConnection(
                             inetsocketaddress.getHostName(),
                             inetsocketaddress.getPort(),
                             LoginProtocols.SERVERBOUND,
                             LoginProtocols.CLIENTBOUND,
-                            new ClientHandshakePacketListenerImpl(
-                                ConnectScreen.this.connection,
-                                p_251955_,
-                                p_252078_,
-                                ConnectScreen.this.parent,
-                                false,
-                                null,
-                                ConnectScreen.this::updateStatus,
-                                new LevelLoadTracker(),
-                                p_320415_
-                            ),
+                            loginListener,
                             p_320415_ != null
                         );
-                    ConnectScreen.this.connection.send(new ServerboundHelloPacket(p_251955_.getUser().getName(), p_251955_.getUser().getProfileId()));
+                        connection.send(new ServerboundHelloPacket(p_251955_.getUser().getName(), p_251955_.getUser().getProfileId()));
+                    }
                 } catch (Exception exception2) {
                     if (ConnectScreen.this.aborted) {
                         return;

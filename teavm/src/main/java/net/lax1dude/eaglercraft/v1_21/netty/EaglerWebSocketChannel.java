@@ -22,7 +22,7 @@ import org.teavm.jso.JSBody;
 
 /**
  * netty {@link AbstractChannel} whose transport is a browser WebSocket ({@link EaglerWebSocketTransport}).
- * MC's normal client pipeline (varint framing, codecs, {@code Connection}) runs on top unchanged. Async WS
+ * MC's packet codecs and {@code Connection} run on top of WebSocket packet boundaries. Async WS
  * callbacks are marshalled onto this channel's event loop so netty only ever sees events on its loop thread
  * (the pattern proven by the integrated-server LocalChannel + DefaultEventLoop in this TeaVM build).
  *
@@ -42,13 +42,19 @@ public final class EaglerWebSocketChannel extends AbstractChannel {
 	private EaglerWebSocketTransport transport;
 	private volatile SocketAddress remoteAddress;
 	private volatile SocketAddress localAddress;
-	private boolean readPending;
+	private volatile boolean readPending;
+	private boolean handshakeComplete;
 
 	public EaglerWebSocketChannel(String url) {
 		super(null);
 		this.url = url;
 		System.out.println("[EaglerHS] channel ctor: AbstractChannel ready");
-		config = new DefaultChannelConfig(this);
+		config = new DefaultChannelConfig(this) {
+			@Override
+			protected void autoReadCleared() {
+				readPending = false;
+			}
+		};
 		System.out.println("[EaglerHS] channel ctor: DefaultChannelConfig ready");
 		config.setAllocator(new PreferHeapByteBufAllocator(config.getAllocator()));
 		System.out.println("[EaglerHS] channel ctor: allocator ready");
@@ -167,6 +173,11 @@ public final class EaglerWebSocketChannel extends AbstractChannel {
 		boolean read = false;
 		byte[] frame;
 		while (readPending && (frame = transport.poll()) != null) {
+			// V5 reserves 0xEE for Eagler extensions such as skins. The Minecraft codec
+			// cannot decode these frames, and this client advertises no extension capabilities.
+			if (handshakeComplete && frame.length > 0 && (frame[0] & 0xFF) == 0xEE) {
+				continue;
+			}
 			read = true;
 			pipeline().fireChannelRead(Unpooled.wrappedBuffer(frame));
 		}
@@ -219,6 +230,7 @@ public final class EaglerWebSocketChannel extends AbstractChannel {
 	}
 
 	void finishHandshake() {
+		handshakeComplete = true;
 		connectPromise.trySuccess();
 	}
 
