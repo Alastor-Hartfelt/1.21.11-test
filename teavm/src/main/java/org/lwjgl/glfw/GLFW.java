@@ -100,6 +100,7 @@ public final class GLFW {
 	/** Virtual absolute cursor position MC reads; advanced by movementX/Y when pointer-locked. */
 	private static double cursorX, cursorY;
 	private static boolean listenersAttached;
+	private static boolean firstFramePresented;
 
 	// ---- init / lifecycle -------------------------------------------------
 
@@ -386,8 +387,15 @@ public final class GLFW {
 	}
 
 	public static void glfwSwapBuffers(long window) {
-		// ponytail: the browser composites the canvas; RAF yielding lands in a later milestone.
+		// The browser composites the canvas. Let the launcher dismiss its loading message.
+		if (!firstFramePresented) {
+			firstFramePresented = true;
+			announceFirstFrame();
+		}
 	}
+
+	@JSBody(params = {}, script = "if (typeof window !== 'undefined') window.dispatchEvent(new Event('eagler-first-frame'));")
+	private static native void announceFirstFrame();
 
 	public static boolean glfwWindowShouldClose(long window) {
 		return false;

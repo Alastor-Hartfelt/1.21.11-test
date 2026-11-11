@@ -1,0 +1,41 @@
+name: Build and test the browser client
+
+on:
+  push:
+    branches: [browser-client]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  browser-client:
+    runs-on: ubuntu-latest
+    timeout-minutes: 100
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Build browser bundle
+        run: ./gradlew --no-daemon --max-workers=2 -Dorg.gradle.jvmargs=-Xmx8g :teavm:bundleBrowserClient
+      - name: Install Chromium test harness
+        run: npm --prefix teavm/run ci
+      - name: Check first frame in Chromium
+        env:
+          SMOKE: '1'
+          SCREENSHOT: ${{ runner.temp }}/minecraft-first-frame.png
+        run: node teavm/run/chromium-run.js teavm/build/browser-client/classes.js 180
+      - name: Upload browser bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: minecraft-1.21.11-browser-client
+          path: |
+            teavm/build/browser-client
+            ${{ runner.temp }}/minecraft-first-frame.png
+          if-no-files-found: error

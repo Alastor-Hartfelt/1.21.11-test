@@ -87,3 +87,14 @@ tasks.withType<org.teavm.gradle.tasks.TeaVMTask>().configureEach {
 		sourceSets["main"].runtimeClasspath
 	)
 }
+
+tasks.register<Sync>("bundleBrowserClient") {
+	group = "minecraft"
+	description = "Build and stage the Minecraft 1.21.11 JavaScript browser client"
+	dependsOn("generateJavaScript")
+	from(layout.buildDirectory.dir("generated/teavm/js"))
+	from("run") {
+		include("index.html", "vanilla-assets.zip")
+	}
+	into(layout.buildDirectory.dir("browser-client"))
+}

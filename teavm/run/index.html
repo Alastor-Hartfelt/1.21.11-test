@@ -2,30 +2,44 @@
 <html>
 <head>
 	<meta charset="utf-8">
-	<title>minecraft-1.21.11-port (TeaVM)</title>
+	<title>Minecraft 1.21.11 Browser Client</title>
 	<style>
 		html, body { margin: 0; padding: 0; background: #000; overflow: hidden; }
 		#gameCanvas { display: block; width: 100vw; height: 100vh; }
+		#bootStatus { position: fixed; top: 1rem; left: 1rem; right: 1rem; color: white; background: #151515; padding: 1rem; font: 1rem system-ui, sans-serif; pointer-events: none; }
 	</style>
 </head>
 <body>
 	<canvas id="gameCanvas" width="1280" height="720"></canvas>
+	<div id="bootStatus" role="status">Loading the Minecraft client…</div>
 	<script>
-		// TeaVM UMD module exports main(); it does not auto-run.
-		window.addEventListener('error', e => console.error('[window error]', e.message));
+		const bootStatus = document.getElementById('bootStatus');
+		function bootFailed(error) {
+			bootStatus.hidden = false;
+			bootStatus.textContent = 'Minecraft could not start. ' + (error.message || error);
+			bootStatus.dataset.failed = 'true';
+			console.error('[boot]', error);
+		}
+		window.addEventListener('error', event => {
+			if (event.error && !bootStatus.hidden) bootFailed(event.error);
+		});
+		window.addEventListener('eagler-first-frame', () => {
+			if (!bootStatus.dataset.failed) bootStatus.hidden = true;
+		}, { once: true });
 	</script>
-	<script src="classes.js"></script>
+	<script src="classes.js" onerror="bootFailed(new Error('Could not load classes.js. Serve the complete browser bundle over HTTP.'))"></script>
 	<script>
-		// Fetch the vanilla resource zip and hand it to the TeaVM boot as an Int8Array
-		// (EaglerAssets.install reads window.__EAGLER_ZIP and unzips it into the VFS)
-		// BEFORE running main([]).
-		fetch('vanilla-assets.zip')
-			.then(r => r.ok ? r.arrayBuffer() : Promise.reject('zip ' + r.status))
-			.then(buf => { window.__EAGLER_ZIP = new Int8Array(buf); console.log('[boot] fetched vanilla-assets.zip ' + buf.byteLength + ' bytes'); })
-			.catch(e => console.warn('[boot] no vanilla-assets.zip (' + e + '); booting without assets'))
-			.finally(() => {
-				try { main([]); } catch (e) { console.error('[main threw]', e && e.stack || e); }
-			});
+		async function boot() {
+			if (bootStatus.dataset.failed) return;
+			if (typeof main !== 'function') throw new Error('The TeaVM entry point is missing.');
+			bootStatus.textContent = 'Loading Minecraft resources…';
+			const response = await fetch('vanilla-assets.zip');
+			if (!response.ok) throw new Error('Could not load vanilla-assets.zip (HTTP ' + response.status + ').');
+			window.__EAGLER_ZIP = new Int8Array(await response.arrayBuffer());
+			bootStatus.textContent = 'Starting Minecraft…';
+			main([], error => { if (error) bootFailed(error); });
+		}
+		boot().catch(bootFailed);
 	</script>
 </body>
 </html>

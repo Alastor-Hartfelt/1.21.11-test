@@ -1,4 +1,29 @@
-# eaglercraft-workspace
+# Minecraft 1.21.11 browser client
+
+Use JDK 21 to build the TeaVM JavaScript client:
+
+```sh
+./gradlew :teavm:bundleBrowserClient
+python3 -m http.server 8080 --directory teavm/build/browser-client
+```
+
+Open http://localhost:8080 in a browser with WebGL2. The bundle contains the launcher,
+compiled JavaScript, and vanilla resources. Serve the entire directory over HTTP.
+
+To check startup in headless Chromium, install the harness dependencies from the
+lockfile and run the smoke check from the repository root:
+
+```sh
+npm --prefix teavm/run ci
+SMOKE=1 node teavm/run/chromium-run.js teavm/build/browser-client/classes.js 180
+```
+
+The smoke check requires the game to present a frame. For multiplayer testing,
+use Direct Connect with the full `wss://` endpoint of an EaglerXServer listener
+configured for Minecraft 1.21.11. See [HANDOFF.md](HANDOFF.md) for the port's
+singleplayer and multiplayer development notes.
+
+## Inherited Eaglercraft workspace instructions
 
 ### Java 17 or greater is required!
 
