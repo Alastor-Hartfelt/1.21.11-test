@@ -9,6 +9,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.UUID;
 import net.minecraft.SharedConstants;
 import net.minecraft.network.Connection;
+import net.minecraft.network.UnconfiguredPipelineHandler;
 
 /**
  * Client-side EaglercraftX handshake, run at the HEAD of the pipeline over {@link EaglerWebSocketChannel}.
@@ -97,6 +98,8 @@ public final class EaglerHandshakeHandler extends ChannelInboundHandlerAdapter {
 							ctx.channel().config().setAutoRead(false);
 							ctx.pipeline().remove("splitter");
 							ctx.pipeline().remove("prepender");
+							// The proxy already handled the vanilla intention packet.
+							ctx.pipeline().replace("encoder", "outbound_config", new UnconfiguredPipelineHandler.Outbound());
 						}
 						ctx.pipeline().remove(this);
 						ctx.fireChannelActive();
