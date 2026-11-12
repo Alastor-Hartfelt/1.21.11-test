@@ -599,7 +599,19 @@ public final class TClass<T> extends TObject implements TGenericDeclaration, TTy
     @SuppressWarnings("unused")
     public static TClass<?> forName(TString name, boolean initialize, TClassLoader loader)
             throws TClassNotFoundException {
-        return forName(name);
+        var type = forName(name);
+        if (initialize) {
+            type.initializeHierarchy();
+        }
+        return type;
+    }
+
+    private void initializeHierarchy() {
+        var parent = getSuperclass();
+        if (parent != null) {
+            parent.initializeHierarchy();
+        }
+        initialize();
     }
 
     @SuppressWarnings({ "unchecked", "unused" })

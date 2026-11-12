@@ -30,6 +30,16 @@ public class ClassTreeIdRegistry {
     }
 
     public int define(Class<?> p_326354_) {
+        // IDs must start after all data accessors registered by the parent classes.
+        Class<?> parent = p_326354_.getSuperclass();
+        if (parent != null && parent != Object.class) {
+            try {
+                Class.forName(parent.getName(), true, parent.getClassLoader());
+            } catch (ClassNotFoundException exception) {
+                throw new IllegalStateException("Could not initialize entity data for " + parent.getName(), exception);
+            }
+        }
+
         int i = this.getLastIdFor(p_326354_);
         int j = i == -1 ? 0 : i + 1;
         this.classToLastIdCache.put(p_326354_, j);
