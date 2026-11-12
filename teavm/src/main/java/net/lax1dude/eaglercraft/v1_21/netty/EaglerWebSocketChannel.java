@@ -46,6 +46,10 @@ public final class EaglerWebSocketChannel extends AbstractChannel {
 	private boolean handshakeComplete;
 
 	public EaglerWebSocketChannel(String url) {
+		this(url, Minecraft.getInstance().getUser().getName());
+	}
+
+	private EaglerWebSocketChannel(String url, String username) {
 		super(null);
 		this.url = url;
 		System.out.println("[EaglerHS] channel ctor: AbstractChannel ready");
@@ -60,11 +64,6 @@ public final class EaglerWebSocketChannel extends AbstractChannel {
 		System.out.println("[EaglerHS] channel ctor: allocator ready");
 		// Eagler handshake runs first, at the head of the pipeline. MC's client handlers (added later by
 		// Connection.connect's initializer) sit after it. The handshake swallows channelActive until 0x09.
-		String username = "Player";
-		try {
-			username = Minecraft.getInstance().getUser().getName();
-		} catch (Throwable ignored) {
-		}
 		pipeline().addLast("eagler_handshake", new EaglerHandshakeHandler(username));
 		System.out.println("[EaglerHS] channel ctor: handshake handler ready");
 	}
@@ -243,7 +242,7 @@ public final class EaglerWebSocketChannel extends AbstractChannel {
 	// P2 self-test: if window.__EAGLER_WS_TEST2 is set, bootstrap the netty channel (which adds the Eagler
 	// handshake handler) and connect, so we exercise the full handshake against the live server without the
 	// MC Multiplayer UI. channelFactory avoids TeaVM reflective channel instantiation (P3 handles .channel()).
-	public static boolean runHandshakeSelfTestIfRequested() {
+	public static boolean runHandshakeSelfTestIfRequested(String username) {
 		String url = handshakeTestUrl();
 		if (url == null || url.isEmpty()) {
 			return false;
@@ -270,7 +269,7 @@ public final class EaglerWebSocketChannel extends AbstractChannel {
 			System.out.println("[EaglerHS] test stage: configure bootstrap");
 			Bootstrap bootstrap = new Bootstrap().group(group).channelFactory(() -> {
 				try {
-					return new EaglerWebSocketChannel(url);
+					return new EaglerWebSocketChannel(url, username);
 				} catch (Throwable t) {
 					System.out.println("[EaglerHS] FAIL constructing channel: " + t);
 					throw t;

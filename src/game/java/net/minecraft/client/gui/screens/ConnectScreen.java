@@ -130,7 +130,11 @@ public class ConnectScreen extends Screen {
                         ConnectScreen.this.channelFuture = pendingConnection;
                     }
 
-                    ChannelFuture connected = pendingConnection.syncUninterruptibly();
+                    // TeaVM cannot rethrow all causes through Netty's syncUninterruptibly().
+                    ChannelFuture connected = pendingConnection.awaitUninterruptibly();
+                    if (!connected.isSuccess()) {
+                        throw new IllegalStateException("Connection failed", connected.cause());
+                    }
                     synchronized (ConnectScreen.this) {
                         if (ConnectScreen.this.aborted) {
                             connection.disconnect(ConnectScreen.ABORT_CONNECTION);

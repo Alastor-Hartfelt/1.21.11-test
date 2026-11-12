@@ -28,7 +28,8 @@ public class EaglerClientMain {
 			return;
 		}
 		// P2: full netty channel + Eagler handshake self-test (window.__EAGLER_WS_TEST2).
-		if (net.lax1dude.eaglercraft.v1_21.netty.EaglerWebSocketChannel.runHandshakeSelfTestIfRequested()) {
+		String username = browserUsername();
+		if (net.lax1dude.eaglercraft.v1_21.netty.EaglerWebSocketChannel.runHandshakeSelfTestIfRequested(username)) {
 			return;
 		}
 
@@ -46,7 +47,7 @@ public class EaglerClientMain {
 			"--gameDir", "/game",
 			"--assetsDir", "/game/assets",
 			"--assetIndex", "29",
-			"--username", browserUsername(),
+			"--username", username,
 			"--accessToken", "0",
 			"--userType", "legacy",
 			"--uuid", "00000000000000000000000000000000",
