@@ -17,6 +17,12 @@ public class PacketEncoder<T extends PacketListener> extends MessageToByteEncode
         this.protocolInfo = p_320006_;
     }
 
+    @Override
+    public boolean acceptOutboundMessage(Object message) {
+        // Protocol configuration tasks must pass through to their pipeline handlers.
+        return message instanceof Packet<?>;
+    }
+
     protected void encode(ChannelHandlerContext p_130545_, Packet<T> p_130546_, ByteBuf p_130547_) throws Exception {
         PacketType<? extends Packet<? super T>> packettype = p_130546_.type();
 

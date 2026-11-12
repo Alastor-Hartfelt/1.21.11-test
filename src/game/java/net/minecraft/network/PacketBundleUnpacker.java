@@ -13,6 +13,11 @@ public class PacketBundleUnpacker extends MessageToMessageEncoder<Packet<?>> {
         this.bundlerInfo = p_320840_;
     }
 
+    @Override
+    public boolean acceptOutboundMessage(Object message) {
+        return message instanceof Packet<?>;
+    }
+
     protected void encode(ChannelHandlerContext p_265691_, Packet<?> p_265038_, List<Object> p_265735_) throws Exception {
         this.bundlerInfo.unbundlePacket(p_265038_, p_265735_::add);
         if (p_265038_.isTerminal()) {
