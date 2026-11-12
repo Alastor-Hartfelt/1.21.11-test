@@ -2,9 +2,11 @@ package org.teavm.classlib.java.util.concurrent;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
+import java.util.concurrent.TimeUnit;
 import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
@@ -16,7 +18,7 @@ import java.util.function.Supplier;
  * callbacks immediately on the completing "thread"; blocking on an incomplete
  * future is impossible and throws instead of deadlocking silently.
  */
-public class TCompletableFuture<T> implements TCompletionStage<T> {
+public class TCompletableFuture<T> implements TCompletionStage<T>, TFuture<T> {
 	private static final Executor DIRECT = Runnable::run;
 
 	private boolean done;
@@ -211,6 +213,15 @@ public class TCompletableFuture<T> implements TCompletionStage<T> {
 			throw new ExecutionException(exception);
 		}
 		return value;
+	}
+
+	@Override
+	public T get(long timeout, TimeUnit unit) throws InterruptedException, ExecutionException, TTimeoutException {
+		Objects.requireNonNull(unit);
+		if (!done && timeout <= 0) {
+			throw new TTimeoutException();
+		}
+		return get();
 	}
 
 	public T getNow(T valueIfAbsent) {
